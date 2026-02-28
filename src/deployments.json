@@ -1,0 +1,18 @@
+{
+  "network": "somniaTestnet",
+  "chainId": 50312,
+  "contracts": {
+    "ReactiveNFT": {
+      "address": "0x2b7c40e9b01b342f3730a886d65168ed501a88b8",
+      "deployedAt": "2026-03-25T11:56:43.727Z",
+      "blockNumber": 339616853
+    },
+    "ReactiveNFTAuction": {
+      "address": "0x8f8602f8f05bf594593a07e63f55095366cf046b",
+      "deployedAt": "2026-03-25T11:56:43.728Z",
+      "blockNumber": 339616862,
+      "balance": "1.00"
+    }
+  },
+  "deployer": "0x09aB514B6974601967E7b379478EFf4073cceD06"
+}
