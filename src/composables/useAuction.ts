@@ -100,48 +100,67 @@ export function useAuction() {
       nftContract: NFT_CONTRACT_ADDRESS,
     })
 
+    // Get current gas price first
+    const gasPrice = await getGasPrice()
+
+    // Estimate gas (with fallback for Somnia testnet)
+    let estimatedGas: bigint | undefined
     try {
-      // Estimate gas
-      const estimatedGas = await estimateGas({
+      estimatedGas = await estimateGas({
         address: AUCTION_CONTRACT_ADDRESS,
         abi: AUCTION_ABI,
         functionName: 'createAuction',
         args: [NFT_CONTRACT_ADDRESS, BigInt(tokenId), BigInt(durationSeconds), reservePrice] as const,
         account: store.account.value as `0x${string}`,
       })
+      if (estimatedGas) {
+        console.log('[useAuction] Gas estimated:', estimatedGas.toString())
+      }
+    } catch (estError) {
+      console.warn('[useAuction] Gas estimation failed, using wallet default:', estError)
+    }
 
-      // Get current gas price
-      const gasPrice = await getGasPrice()
-
+    try {
       const hash = await walletClient.writeContract({
         address: AUCTION_CONTRACT_ADDRESS,
         abi: AUCTION_ABI,
         functionName: 'createAuction',
         args: [NFT_CONTRACT_ADDRESS, BigInt(tokenId), BigInt(durationSeconds), reservePrice] as const,
         account: store.account.value as `0x${string}`,
-        gas: estimatedGas || 500000n, // Fallback to 500k if estimation fails
+        gas: estimatedGas, // undefined lets wallet use its own estimation
         maxFeePerGas: gasPrice,
-        maxPriorityFeePerGas: 1_000_000_000n, // 1 gwei priority fee
+        maxPriorityFeePerGas: 3_000_000_000n, // 3 gwei priority fee (higher for Somnia)
       })
       console.log('[useAuction] Transaction hash:', hash)
-      
+
       // Wait for confirmation
       const receipt = await publicClient.waitForTransactionReceipt({
         hash,
         timeout: 120_000,
       })
-      
+
       console.log('[useAuction] Auction created:', receipt.transactionHash)
       return { hash, receipt }
     } catch (error: any) {
       console.error('[useAuction] Create auction failed:', error)
-      
-      if (error.message?.includes('nonce')) {
+
+      // Check for specific error messages from contract
+      if (error.message?.includes('Duration too short')) {
+        throw new Error('Duration must be at least 60 seconds (1 minute)')
+      } else if (error.message?.includes('Duration too long')) {
+        throw new Error('Duration must be at most 86400 seconds (24 hours)')
+      } else if (error.message?.includes('Not NFT owner')) {
+        throw new Error('You do not own this NFT')
+      } else if (error.message?.includes('Contract not approved')) {
+        throw new Error('Auction contract is not approved to transfer your NFT. Please approve first.')
+      } else if (error.message?.includes('nonce')) {
         throw new Error('Transaction nonce conflict. Please try again.')
       } else if (error.message?.includes('underpriced')) {
         throw new Error('Transaction was underpriced. Please try again.')
       } else if (error.message?.includes('replacement')) {
         throw new Error('Transaction was replaced. Please try again.')
+      } else if (error.message?.includes('execution reverted')) {
+        throw new Error('Transaction failed. Possible reasons:\n1. Auction contract needs 32 SOMI balance for subscriptions\n2. NFT approval issue\n3. Invalid duration (must be 60s - 24hrs)')
       }
       throw error
     }
@@ -163,10 +182,28 @@ export function useAuction() {
       account: store.account.value,
     })
 
-    try {
-      // Estimate gas (note: can't estimate with value, so we use a reasonable default)
-      const gasPrice = await getGasPrice()
+    // Get current gas price
+    const gasPrice = await getGasPrice()
 
+    // Try to estimate gas for bid
+    let estimatedGas: bigint | undefined
+    try {
+      estimatedGas = await estimateGas({
+        address: AUCTION_CONTRACT_ADDRESS,
+        abi: AUCTION_ABI,
+        functionName: 'placeBid',
+        args: [BigInt(auctionId)],
+        account: store.account.value as `0x${string}`,
+        value: bidValue,
+      })
+      if (estimatedGas) {
+        console.log('[useAuction] Bid gas estimated:', estimatedGas.toString())
+      }
+    } catch (estError) {
+      console.warn('[useAuction] Bid gas estimation failed, using wallet default:', estError)
+    }
+
+    try {
       const hash = await walletClient.writeContract({
         address: AUCTION_CONTRACT_ADDRESS,
         abi: AUCTION_ABI,
@@ -174,7 +211,7 @@ export function useAuction() {
         args: [BigInt(auctionId)],
         value: bidValue,
         account: store.account.value as `0x${string}`,
-        gas: 300000n, // Fixed gas for placeBid (estimation with value can fail)
+        gas: estimatedGas, // undefined lets wallet use its own estimation
         maxFeePerGas: gasPrice,
         maxPriorityFeePerGas: 1_000_000_000n,
       })

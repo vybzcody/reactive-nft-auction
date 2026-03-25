@@ -27,20 +27,26 @@ const emit = defineEmits<{
   create: []
   myNfts: []
   navigate: [view: string]
+  openNotifications: []
 }>()
 
 const handleSelectNFT = (nft: NFTCard) => {
   emit('select', nft)
 }
+
+const handleOpenNotifications = () => {
+  emit('openNotifications')
+}
 </script>
 
 <template>
   <div class="min-h-screen bg-white">
-    <Header 
+    <Header
       :current-view="currentView"
       @create="() => emit('create')"
       @my-nfts="() => emit('myNfts')"
       @navigate="(view) => emit('navigate', view)"
+      @open-notifications="handleOpenNotifications"
     />
     <div class="flex">
       <Sidebar />

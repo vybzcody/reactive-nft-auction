@@ -7,6 +7,7 @@ import NFTDetails from './components/NFTDetails.vue'
 import CreateAuction from './components/CreateAuction.vue'
 import MyNFTs from './components/MyNFTs.vue'
 import Toast from './components/Toast.vue'
+import ReactiveNotification from './components/ReactiveNotification.vue'
 import { useToast } from './composables/useToast'
 
 type ViewState = 'landing' | 'dashboard' | 'marketplace' | 'details' | 'create' | 'my-nfts'
@@ -26,6 +27,7 @@ interface NFTCard {
 
 const currentView = ref<ViewState>('landing')
 const selectedNFT = ref<NFTCard | null>(null)
+const notificationsRef = ref<InstanceType<typeof ReactiveNotification> | null>(null)
 
 const { toasts, dismissToast, dismissAllToasts } = useToast()
 
@@ -58,6 +60,12 @@ const handleMyNFTs = () => {
 const handleCreated = () => {
   currentView.value = 'dashboard'
 }
+
+const openNotifications = () => {
+  // Trigger the notification panel to open
+  const event = new CustomEvent('open-notifications')
+  window.dispatchEvent(event)
+}
 </script>
 
 <template>
@@ -69,15 +77,19 @@ const handleCreated = () => {
       @dismiss-all="dismissAllToasts"
     />
 
+    <!-- On-Chain Reactive Notifications -->
+    <ReactiveNotification />
+
     <!-- Main Content -->
     <Landing v-if="currentView === 'landing'" @navigate="navigateTo" />
-    <Dashboard 
-      v-else-if="currentView === 'dashboard'" 
+    <Dashboard
+      v-else-if="currentView === 'dashboard'"
       :current-view="currentView"
-      @select="handleSelectNFT" 
+      @select="handleSelectNFT"
       @navigate="navigateTo"
       @create="handleCreate"
       @my-nfts="handleMyNFTs"
+      @open-notifications="openNotifications"
     />
     <NFTMarketplace
       v-else-if="currentView === 'marketplace'"

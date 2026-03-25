@@ -93,12 +93,15 @@ class PriceDiscoveryService {
       // In production, you'd query all auction events
       const floorPrice = await this.getFloorPrice()
 
+      const supplyNum = Number(totalSupply)
+      const estimatedSales = Math.max(1, Math.floor(supplyNum / 10)) // Ensure at least 1 and floor the value
+
       const stats: PriceStats = {
         floorPrice,
         averagePrice: floorPrice, // Simplified
         medianPrice: floorPrice,
-        totalVolume: floorPrice * BigInt(Number(totalSupply) / 10), // Estimate
-        salesCount: Number(totalSupply) / 10, // Estimate 10% sell rate
+        totalVolume: floorPrice * BigInt(estimatedSales),
+        salesCount: estimatedSales,
       }
 
       this.setCache(cacheKey, stats)

@@ -8,7 +8,7 @@ interface AuctionEvent {
   auctionId?: string
   timestamp: number
   txHash?: string
-  blockNumber?: number
+  blockNumber?: string
   // Event-specific data
   bidder?: string
   amount?: string
@@ -19,12 +19,15 @@ interface AuctionEvent {
   seller?: string
   tokenId?: string
   message?: string
+  oldEndTime?: string
+  newEndTime?: string
+  bidAmount?: string
 }
 
 export function useReactivity() {
   const events = ref<AuctionEvent[]>([])
   const connected = ref(false)
-  let unsubscribeFns: Unsubscribe[] = []
+  let unsubscribeFns: (() => void)[] = []
 
   const addEvent = (event: AuctionEvent) => {
     events.value.unshift(event)
@@ -59,7 +62,7 @@ export function useReactivity() {
             extended: log.args.extended,
             timestamp: Date.now(),
             txHash: log.transactionHash,
-            blockNumber: log.blockNumber,
+            blockNumber: log.blockNumber?.toString(),
           })
         })
       },
@@ -80,7 +83,7 @@ export function useReactivity() {
             newEndTime: log.args.newEndTime?.toString(),
             timestamp: Date.now(),
             txHash: log.transactionHash,
-            blockNumber: log.blockNumber,
+            blockNumber: log.blockNumber?.toString(),
           })
         })
       },
@@ -102,7 +105,7 @@ export function useReactivity() {
             reserveMet: log.args.reserveMet,
             timestamp: Date.now(),
             txHash: log.transactionHash,
-            blockNumber: log.blockNumber,
+            blockNumber: log.blockNumber?.toString(),
           })
         })
       },
@@ -124,7 +127,7 @@ export function useReactivity() {
             endTime: log.args.endTime?.toString(),
             timestamp: Date.now(),
             txHash: log.transactionHash,
-            blockNumber: log.blockNumber,
+            blockNumber: log.blockNumber?.toString(),
           })
         })
       },
@@ -144,7 +147,7 @@ export function useReactivity() {
             bidAmount: log.args.bidAmount?.toString(),
             timestamp: Date.now(),
             txHash: log.transactionHash,
-            blockNumber: log.blockNumber,
+            blockNumber: log.blockNumber?.toString(),
           })
         })
       },
@@ -164,7 +167,7 @@ export function useReactivity() {
             bidder: log.args.bidder,
             timestamp: Date.now(),
             txHash: log.transactionHash,
-            blockNumber: log.blockNumber,
+            blockNumber: log.blockNumber?.toString(),
           })
         })
       },
@@ -183,7 +186,7 @@ export function useReactivity() {
             auctionId: log.args.auctionId?.toString(),
             timestamp: Date.now(),
             txHash: log.transactionHash,
-            blockNumber: log.blockNumber,
+            blockNumber: log.blockNumber?.toString(),
           })
         })
       },

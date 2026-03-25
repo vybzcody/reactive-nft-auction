@@ -4,8 +4,10 @@ import { parseEther } from 'viem'
 import { ArrowLeft, Clock, TrendingUp, DollarSign, Heart, Share2, MoreVertical, Zap, CheckCircle, Plus, Upload, Image as ImageIcon } from 'lucide-vue-next'
 import { useAuction } from '../composables/useAuction'
 import { useNFT } from '../composables/useNFT'
+import { publicClient } from '../config/clients'
+import { AUCTION_CONTRACT_ADDRESS, AUCTION_ABI } from '../config/contract'
 import { storacha } from '../services/storacha'
-import { bidHistory, type BidRecord } from '../services/bidHistory'
+import type { BidRecord } from '../services/bidHistory'
 import BidHistory from './BidHistory.vue'
 import PriceDiscovery from './PriceDiscovery.vue'
 
@@ -52,6 +54,41 @@ const success = ref('')
 const timeLeft = ref<{ hours: number; minutes: number; seconds: number } | null>(null)
 const auctionEnded = ref(false)
 const approved = ref(false)
+const bidHistoryData = ref<BidRecord[]>([])
+const loadingBids = ref(false)
+
+// Fetch real bid history from contract events
+const fetchBidHistory = async (auctionId: number) => {
+  if (!auctionId) return
+  
+  loadingBids.value = true
+  try {
+    // Get all BidPlaced events for this auction
+    const events = await publicClient.getContractEvents({
+      address: AUCTION_CONTRACT_ADDRESS,
+      abi: AUCTION_ABI,
+      eventName: 'BidPlaced',
+      args: {
+        auctionId: BigInt(auctionId),
+      },
+      fromBlock: 0n,
+    })
+
+    // Convert events to BidRecord format
+    bidHistoryData.value = events.map((event, index) => ({
+      id: index + 1,
+      bidder: event.args.bidder || '0x0000000000000000000000000000000000000000',
+      amount: event.args.amount || 0n,
+      timestamp: Date.now(), // Block timestamp would be better but requires extra lookup
+      isProxy: false,
+    }))
+  } catch (err) {
+    console.error('Failed to fetch bid history:', err)
+    bidHistoryData.value = []
+  } finally {
+    loadingBids.value = false
+  }
+}
 
 // Custom image upload
 const uploadMode = ref<'dicebear' | 'custom'>('dicebear')
@@ -81,6 +118,10 @@ onMounted(async () => {
   if (props.isAuction) {
     updateCountdown()
     countdownInterval = window.setInterval(updateCountdown, 1000)
+    // Fetch real bid history
+    if (props.nft.id) {
+      await fetchBidHistory(props.nft.id)
+    }
   } else {
     if (props.nft.tokenId) {
       approved.value = await isApprovedForAuction(Number(props.nft.tokenId))
@@ -178,11 +219,11 @@ const uploadToIPFS = async () => {
   try {
     uploading.value = true
     uploadProgress.value = 10
-    
+
     const cid = await storacha.upload(selectedFile.value, (progress) => {
       uploadProgress.value = progress
     })
-    
+
     uploadedImage.value = storacha.getGatewayUrl(cid)
     uploadProgress.value = 100
   } catch (err: any) {
@@ -191,26 +232,6 @@ const uploadToIPFS = async () => {
   } finally {
     uploading.value = false
   }
-}
-
-const getMockBidHistory = (): BidRecord[] => {
-  // Mock data for demonstration
-  return [
-    {
-      id: 1,
-      bidder: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-      amount: parseEther('0.5'),
-      timestamp: Date.now() - 3600000,
-      isProxy: false,
-    },
-    {
-      id: 2,
-      bidder: '0x8ba1f109551bD432803012645Hac136c0x89',
-      amount: parseEther('0.75'),
-      timestamp: Date.now() - 1800000,
-      isProxy: true,
-    },
-  ]
 }
 </script>
 
@@ -291,8 +312,12 @@ const getMockBidHistory = (): BidRecord[] => {
 
           <!-- Bid History (for auctions) -->
           <div v-if="isAuction" class="card-nft p-6">
-            <BidHistory 
-              :bids="getMockBidHistory()"
+            <div v-if="loadingBids" class="flex items-center justify-center py-8">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            </div>
+            <BidHistory
+              v-else
+              :bids="bidHistoryData"
               :current-highest-bidder="nft.highestBidder || ''"
             />
           </div>

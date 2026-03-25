@@ -80,23 +80,29 @@ const getNotificationTitle = (type: string) => {
 }
 
 const getNotificationMessage = (event: any) => {
+  const auctionId = event.auctionId || '?'
+  const amount = event.amount ? (Number(event.amount) / 1e18).toFixed(4) : '?'
+  const bidder = event.bidder ? `${event.bidder.slice(0, 6)}...${event.bidder.slice(-4)}` : 'Someone'
+  const winner = event.winner ? `${event.winner.slice(0, 6)}...${event.winner.slice(-4)}` : 'Someone'
+  const tokenId = event.tokenId || '?'
+
   switch (event.type) {
     case 'BidPlaced':
-      return `${event.bidder?.slice(0, 6)}...${event.bidder?.slice(-4)} bid ${(Number(event.amount) / 1e18).toFixed(4)} STT${event.extended ? ' • Extended!' : ''}`
+      return `${bidder} bid ${amount} STT on Auction #${auctionId}${event.extended ? ' • Extended!' : ''}`
     case 'AuctionExtended':
-      return 'Auction extended by 2 minutes due to late bid'
+      return `Auction #${auctionId} extended by 2 minutes due to late bid`
     case 'AuctionFinalized':
-      return `Won by ${event.winner?.slice(0, 6)}...${event.winner?.slice(-4)} for ${(Number(event.amount) / 1e18).toFixed(4)} STT`
+      return `Auction #${auctionId} won by ${winner} for ${amount} STT`
     case 'AuctionCreated':
-      return `New auction for NFT #${event.tokenId}`
+      return `New auction created for NFT #${tokenId} (Auction #${auctionId})`
     case 'ReserveMet':
-      return `Reserve met with ${(Number(event.amount) / 1e18).toFixed(4)} STT bid`
+      return `Reserve price met on Auction #${auctionId} with ${amount} STT bid`
     case 'SniperDetected':
-      return `🚨 Sniper bid by ${event.bidder?.slice(0, 6)}...${event.bidder?.slice(-4)} on Auction #${event.auctionId}!`
+      return `🚨 Sniper bid by ${bidder} on Auction #${auctionId}!`
     case 'AuctionAutoFinalized':
-      return `Auction #${event.auctionId} automatically finalized on-chain`
+      return `Auction #${auctionId} automatically finalized on-chain`
     default:
-      return `Auction #${event.auctionId}`
+      return `Auction #${auctionId}`
   }
 }
 
@@ -113,6 +119,13 @@ const clearEvents = () => {
 
 const togglePanel = () => {
   showPanel.value = !showPanel.value
+}
+
+// Listen for global event to open panel
+if (typeof window !== 'undefined') {
+  window.addEventListener('open-notifications', () => {
+    showPanel.value = true
+  })
 }
 </script>
 
@@ -217,8 +230,8 @@ const togglePanel = () => {
             leave-to-class="transform -translate-x-full opacity-0"
           >
             <div
-              v-for="event in events"
-              :key="event.timestamp"
+              v-for="(event, idx) in events"
+              :key="`event-${event.timestamp}-${event.auctionId || idx}`"
               class="p-4 border-b border-border/30 hover:bg-space-light/50 transition-colors cursor-pointer group"
             >
               <div class="flex items-start space-x-3">

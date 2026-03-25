@@ -5,7 +5,8 @@ import Alert from './ui/Alert.vue'
 import Button from './ui/Button.vue'
 import Input from './ui/Input.vue'
 import Card from './ui/Card.vue'
-import { Zap, Clock, TrendingUp, AlertCircle } from 'lucide-vue-next'
+import { Zap, Clock, TrendingUp } from 'lucide-vue-next'
+import { parseEther } from 'viem'
 
 const { account, chainId, isConnected, isCorrectChain, connect, switchChain, getActiveAuctions, getAuction, createAuction, placeBid, formatEther } = useAuction()
 
@@ -15,6 +16,7 @@ const error = ref('')
 
 const newTokenId = ref('')
 const newDuration = ref('24')
+const newReserve = ref('0.1') // Default reserve price in STT
 const bidAuctionId = ref('')
 const bidAmount = ref('')
 
@@ -53,11 +55,16 @@ const handleSwitchChain = async () => {
 
 const handleCreateAuction = async () => {
   try {
-    if (!newTokenId.value || !newDuration.value) return
+    if (!newTokenId.value || !newDuration.value || !newReserve.value) return
     loading.value = true
-    await createAuction(parseInt(newTokenId.value), parseInt(newDuration.value))
+    await createAuction(
+      parseInt(newTokenId.value),
+      parseInt(newDuration.value) * 3600, // Convert hours to seconds
+      parseEther(newReserve.value)
+    )
     newTokenId.value = ''
     newDuration.value = '24'
+    newReserve.value = '0.1'
     await loadAuctions()
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to create auction'
@@ -172,7 +179,7 @@ onMounted(() => {
       <div v-if="isConnected && isCorrectChain" class="grid gap-6">
         <!-- Create Auction -->
         <Card title="Create Auction">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Input
               v-model="newTokenId"
               type="number"
@@ -185,10 +192,17 @@ onMounted(() => {
               label="Duration (hours)"
               placeholder="Duration in hours"
             />
+            <Input
+              v-model="newReserve"
+              type="number"
+              step="0.001"
+              label="Reserve Price (STT)"
+              placeholder="Reserve price in STT"
+            />
             <div class="flex items-end">
               <Button
                 color="green"
-                :disabled="loading || !newTokenId || !newDuration"
+                :disabled="loading || !newTokenId || !newDuration || !newReserve"
                 @click="handleCreateAuction"
                 class="w-full"
               >

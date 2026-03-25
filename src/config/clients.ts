@@ -56,8 +56,8 @@ export const estimateGas = async (params: {
     // Add 20% buffer to avoid out-of-gas errors
     return (estimated * 120n) / 100n
   } catch (error) {
-    console.error('Gas estimation failed:', error)
-    // Return null to let wallet handle estimation
-    return null
+    console.warn('Gas estimation failed:', error)
+    // Return undefined to let wallet handle estimation
+    return undefined
   }
 }

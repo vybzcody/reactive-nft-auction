@@ -79,9 +79,12 @@ const loadUserNFTsData = async () => {
   const newApproved: Record<number, boolean> = {}
   for (const nft of userNFTs.value) {
     const tokenId = Number(nft.tokenId)
-    newApproved[tokenId] = await isApprovedForAuction(tokenId)
+    const isApproved = await isApprovedForAuction(tokenId)
+    newApproved[tokenId] = isApproved
+    console.log(`[CreateAuction] NFT #${tokenId} approved:`, isApproved)
   }
   approved.value = newApproved
+  console.log('[CreateAuction] Approved state:', newApproved)
 }
 
 const selectedNFT = computed(() => {
@@ -92,8 +95,10 @@ const selectedNFT = computed(() => {
 const handleApprove = async (tokenId: number) => {
   try {
     approving.value = true
+    console.log('[CreateAuction] Approving NFT #', tokenId)
     await approveForAuction(tokenId)
     approved.value[tokenId] = true
+    console.log('[CreateAuction] Approved NFT #', tokenId)
   } catch (err) {
     console.error('Approval failed:', err)
   } finally {
@@ -114,7 +119,27 @@ const handleMint = async () => {
 
 const handleCreateAuction = async () => {
   const tokenId = selectedTokenId.value
-  if (!tokenId) return
+  console.log('[CreateAuction] handleCreateAuction called, selectedTokenId:', tokenId)
+  console.log('[CreateAuction] selectedNFT:', selectedNFT.value)
+  console.log('[CreateAuction] isConnected:', isConnected.value)
+  
+  if (tokenId === null || tokenId === undefined) {
+    console.error('[CreateAuction] No token ID selected')
+    alert('Please select an NFT first')
+    return
+  }
+
+  if (!isConnected.value) {
+    console.error('[CreateAuction] Wallet not connected')
+    alert('Please connect your wallet first')
+    return
+  }
+
+  console.log('[CreateAuction] Creating auction:', {
+    tokenId,
+    duration: auctionDuration.value,
+    reserve: auctionReserve.value,
+  })
 
   try {
     await createAuction(
@@ -126,18 +151,34 @@ const handleCreateAuction = async () => {
     emit('back')
   } catch (err) {
     console.error('Create auction failed:', err)
+    alert('Failed to create auction: ' + (err as Error).message)
   }
 }
 
 const handleSelectNFT = (tokenId: number) => {
+  console.log('[CreateAuction] handleSelectNFT called with tokenId:', tokenId)
   selectedTokenId.value = tokenId
   step.value = 'create-auction'
+  console.log('[CreateAuction] After selection - selectedTokenId:', selectedTokenId.value)
+  console.log('[CreateAuction] After selection - step:', step.value)
+  console.log('[CreateAuction] After selection - selectedNFT:', selectedNFT.value)
 }
 
 const handleMinted = async (tokenId: number) => {
   showMintModal.value = false
   await loadUserNFTsData()
   step.value = 'select-nft'
+}
+
+const handleDirectAuctionCreate = () => {
+  // Go directly to NFT selection for auction
+  if (userNFTs.value.length > 0) {
+    step.value = 'select-nft'
+  } else {
+    // No NFTs, show message and go to mint
+    alert('You need to mint an NFT first before creating an auction')
+    step.value = 'mint'
+  }
 }
 
 const handleMintInline = async () => {
@@ -241,7 +282,7 @@ onMounted(async () => {
         </button>
 
         <button
-          @click="step = 'select-nft'"
+          @click="handleDirectAuctionCreate"
           class="p-8 rounded-2xl border-2 transition-all hover:shadow-lg"
           :class="'border-gray-200 hover:border-blue-500'"
         >
@@ -428,15 +469,19 @@ onMounted(async () => {
             :key="nft.tokenId"
             @click="handleSelectNFT(Number(nft.tokenId))"
             class="card-nft cursor-pointer group"
+            :class="selectedTokenId === Number(nft.tokenId) ? 'ring-4 ring-blue-500 border-blue-500' : ''"
           >
             <div class="relative aspect-square overflow-hidden bg-gray-100">
               <img :src="nft.image" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+              <div v-if="selectedTokenId === Number(nft.tokenId)" class="absolute top-2 right-2 bg-blue-500 text-white rounded-full p-1">
+                <CheckCircle :size="16" />
+              </div>
               <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-4">
                 <span class="text-white text-sm font-medium">Click to select</span>
               </div>
             </div>
             <div class="p-3">
-              <h3 class="font-semibold text-sm">NFT #{{ nft.tokenId }}</h3>
+              <h3 class="font-semibold text-sm">NFT #{{ Number(nft.tokenId) }}</h3>
               <p class="text-xs text-gray-500">{{ nft.styleName }}</p>
             </div>
           </div>
@@ -457,7 +502,7 @@ onMounted(async () => {
           <div class="flex items-center space-x-4">
             <img :src="selectedNFT.image" class="w-20 h-20 rounded-xl object-cover" />
             <div>
-              <h3 class="font-semibold">NFT #{{ selectedNFT.tokenId }}</h3>
+              <h3 class="font-semibold">NFT #{{ Number(selectedNFT.tokenId) }}</h3>
               <p class="text-sm text-gray-500">{{ selectedNFT.styleName }}</p>
               <div v-if="approved[selectedTokenId!]" class="flex items-center space-x-1 text-green-600 text-xs mt-1">
                 <CheckCircle :size="12" />

@@ -1,23 +1,23 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Search, Bell, Plus, User, ChevronDown, Menu, LogOut, RefreshCcw, Zap, Clock, Image } from 'lucide-vue-next'
+import { Search, Plus, User, ChevronDown, LogOut, RefreshCcw, Bell } from 'lucide-vue-next'
 import { useAuction } from '../composables/useAuction'
 
 const { account, isConnected, connect, switchChain, chainId } = useAuction()
 
 const searchQuery = ref('')
 const walletDropdownOpen = ref(false)
-const notificationsOpen = ref(false)
 const mobileMenuOpen = ref(false)
-
-const props = defineProps<{
-  currentView?: string
-}>()
 
 const emit = defineEmits<{
   create: []
   navigate: [view: string]
   myNfts: []
+  openNotifications: []
+}>()
+
+const props = defineProps<{
+  currentView?: string
 }>()
 
 const handleConnect = async () => {
@@ -57,14 +57,6 @@ const isActive = computed(() => (view: string) => props.currentView === view)
 const formatAddress = (address: string) => {
   return `${address.slice(0, 6)}...${address.slice(-4)}`
 }
-
-// Mock notifications
-const notifications = ref([
-  { id: 1, type: 'bid', message: 'New bid on NFT #123', time: '2m ago', read: false },
-  { id: 2, type: 'auction', message: 'Auction #456 ending soon', time: '15m ago', read: false },
-])
-
-const unreadCount = ref(2)
 </script>
 
 <template>
@@ -130,54 +122,14 @@ const unreadCount = ref(2)
             <span class="hidden sm:inline">Create</span>
           </button>
 
-          <!-- Notifications -->
-          <div class="relative">
-            <button 
-              @click="notificationsOpen = !notificationsOpen"
-              class="p-2 hover:bg-gray-100 rounded-full transition-colors relative"
-            >
-              <Bell :size="20" class="text-gray-600" />
-              <span v-if="unreadCount > 0" class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-            </button>
-
-            <!-- Notifications Dropdown -->
-            <div
-              v-if="notificationsOpen"
-              class="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden z-50"
-              @click.away="notificationsOpen = false"
-            >
-              <div class="p-4 border-b border-gray-100 flex items-center justify-between">
-                <h3 class="font-semibold">Notifications</h3>
-                <button 
-                  @click="unreadCount = 0; notifications = []"
-                  class="text-xs text-blue-500 hover:text-blue-600"
-                >
-                  Clear all
-                </button>
-              </div>
-              
-              <div class="max-h-96 overflow-y-auto">
-                <div v-if="notifications.length === 0" class="p-8 text-center">
-                  <Bell :size="32" class="mx-auto text-gray-300 mb-2" />
-                  <p class="text-gray-500 text-sm">No notifications</p>
-                </div>
-                <div
-                  v-for="notification in notifications"
-                  :key="notification.id"
-                  class="p-4 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
-                >
-                  <div class="flex items-start space-x-3">
-                    <div class="w-2 h-2 rounded-full bg-blue-500 mt-1.5 flex-shrink-0" v-if="!notification.read"></div>
-                    <div v-else class="w-2 h-2 flex-shrink-0"></div>
-                    <div class="flex-1">
-                      <p class="text-sm text-gray-900">{{ notification.message }}</p>
-                      <p class="text-xs text-gray-500 mt-1">{{ notification.time }}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- Notifications Bell -->
+          <button
+            @click="emit('openNotifications')"
+            class="p-2 hover:bg-gray-100 rounded-full transition-colors relative"
+            title="View Notifications"
+          >
+            <Bell :size="20" class="text-gray-600" />
+          </button>
 
           <!-- Wallet/Profile -->
           <div v-if="!isConnected">
