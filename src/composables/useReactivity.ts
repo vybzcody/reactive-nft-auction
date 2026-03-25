@@ -18,10 +18,39 @@ interface AuctionEvent {
   tokenId?: string
 }
 
+const STORAGE_KEY = 'nft-auction-events'
+const MAX_STORED_EVENTS = 50
+
 export function useReactivity() {
   const events = ref<AuctionEvent[]>([])
   const connected = ref(false)
   let unsubscribeFns: (() => void)[] = []
+
+  // Load events from localStorage
+  const loadStoredEvents = () => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        // Only keep events from last 24 hours
+        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000
+        events.value = parsed.filter((e: AuctionEvent) => e.timestamp > oneDayAgo)
+        console.log('📦 Loaded', events.value.length, 'events from localStorage')
+      }
+    } catch (err) {
+      console.error('Failed to load stored events:', err)
+    }
+  }
+
+  // Save events to localStorage
+  const saveStoredEvents = () => {
+    try {
+      const toStore = events.value.slice(0, MAX_STORED_EVENTS)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore))
+    } catch (err) {
+      console.error('Failed to save events:', err)
+    }
+  }
 
   const addEvent = (event: AuctionEvent) => {
     console.log('📬 Event received:', event.type, 'auctionId:', event.auctionId)
@@ -33,9 +62,89 @@ export function useReactivity() {
     )
     if (!isDuplicate) {
       events.value.unshift(event)
-      if (events.value.length > 100) {
-        events.value = events.value.slice(0, 100)
+      if (events.value.length > MAX_STORED_EVENTS) {
+        events.value = events.value.slice(0, MAX_STORED_EVENTS)
       }
+      saveStoredEvents()
+    }
+  }
+
+  const fetchPastEvents = async () => {
+    try {
+      const latestBlock = await publicClient.getBlockNumber()
+      const fromBlock = latestBlock - BigInt(500) // Last 500 blocks (~2.5 hours at 30s blocks)
+      
+      console.log('📜 Fetching past events from block', fromBlock.toString(), 'to', latestBlock.toString())
+
+      // Fetch BidPlaced events
+      const bidEvents = await publicClient.getContractEvents({
+        address: AUCTION_CONTRACT_ADDRESS,
+        abi: AUCTION_ABI,
+        eventName: 'BidPlaced',
+        fromBlock,
+        toBlock: latestBlock,
+      })
+      
+      bidEvents.forEach(log => {
+        addEvent({
+          type: 'BidPlaced',
+          auctionId: log.args.auctionId?.toString(),
+          bidder: log.args.bidder,
+          amount: log.args.amount?.toString(),
+          endTime: log.args.endTime?.toString(),
+          extended: log.args.extended,
+          timestamp: Date.now(),
+          txHash: log.transactionHash,
+          blockNumber: log.blockNumber?.toString(),
+        })
+      })
+
+      // Fetch AuctionCreated events
+      const createdEvents = await publicClient.getContractEvents({
+        address: AUCTION_CONTRACT_ADDRESS,
+        abi: AUCTION_ABI,
+        eventName: 'AuctionCreated',
+        fromBlock,
+        toBlock: latestBlock,
+      })
+      
+      createdEvents.forEach(log => {
+        addEvent({
+          type: 'AuctionCreated',
+          auctionId: log.args.auctionId?.toString(),
+          tokenId: log.args.tokenId?.toString(),
+          seller: log.args.seller,
+          timestamp: Date.now(),
+          txHash: log.transactionHash,
+          blockNumber: log.blockNumber?.toString(),
+        })
+      })
+
+      // Fetch AuctionFinalized events
+      const finalizedEvents = await publicClient.getContractEvents({
+        address: AUCTION_CONTRACT_ADDRESS,
+        abi: AUCTION_ABI,
+        eventName: 'AuctionFinalized',
+        fromBlock,
+        toBlock: latestBlock,
+      })
+      
+      finalizedEvents.forEach(log => {
+        addEvent({
+          type: 'AuctionFinalized',
+          auctionId: log.args.auctionId?.toString(),
+          winner: log.args.winner,
+          amount: log.args.amount?.toString(),
+          reserveMet: log.args.reserveMet,
+          timestamp: Date.now(),
+          txHash: log.transactionHash,
+          blockNumber: log.blockNumber?.toString(),
+        })
+      })
+
+      console.log('✅ Loaded past events:', bidEvents.length, 'bids,', createdEvents.length, 'created,', finalizedEvents.length, 'finalized')
+    } catch (err) {
+      console.error('Failed to fetch past events:', err)
     }
   }
 
@@ -52,7 +161,13 @@ export function useReactivity() {
       console.log('📡 Watching contract:', AUCTION_CONTRACT_ADDRESS)
       connected.value = true
 
-      // BidPlaced - no specific filter to catch all bids
+      // Load stored events first
+      loadStoredEvents()
+
+      // Fetch recent past events
+      await fetchPastEvents()
+
+      // BidPlaced - live listener
       const unsub1 = publicClient.watchContractEvent({
         address: AUCTION_CONTRACT_ADDRESS,
         abi: AUCTION_ABI,
@@ -77,7 +192,7 @@ export function useReactivity() {
       })
       unsubscribeFns.push(unsub1)
 
-      // AuctionCreated
+      // AuctionCreated - live listener
       const unsub2 = publicClient.watchContractEvent({
         address: AUCTION_CONTRACT_ADDRESS,
         abi: AUCTION_ABI,
@@ -97,7 +212,7 @@ export function useReactivity() {
       })
       unsubscribeFns.push(unsub2)
 
-      // AuctionFinalized
+      // AuctionFinalized - live listener
       const unsub3 = publicClient.watchContractEvent({
         address: AUCTION_CONTRACT_ADDRESS,
         abi: AUCTION_ABI,
