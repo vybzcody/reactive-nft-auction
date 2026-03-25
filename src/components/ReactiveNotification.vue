@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Bell, X, TrendingUp, Clock, Award, Sparkles, Zap, CheckCircle2, AlertCircle, Crown, Settings } from 'lucide-vue-next'
 import { useReactivity } from '../composables/useReactivity'
 
@@ -7,14 +7,32 @@ const { events, connected } = useReactivity()
 const showPanel = ref(false)
 const showSettings = ref(false)
 
+// Debug: Watch for events
+watch(events, (newVal) => {
+  console.log('🔔 ReactiveNotification: events changed, count:', newVal.length)
+  console.log('  Events:', newVal)
+}, { deep: true })
+
+watch(connected, (newVal) => {
+  console.log('🔔 ReactiveNotification: connected =', newVal)
+}, { immediate: true })
+
+console.log('🔔 ReactiveNotification mounted, initial connected:', connected.value, 'events:', events.value.length)
+
 // Notification settings
 const toastEnabled = ref(true)
 const soundEnabled = ref(false)
 const outbidAlerts = ref(true)
 const auctionEndingAlerts = ref(true)
 
-const unreadCount = computed(() => events.value.length)
-const hasNotifications = computed(() => events.value.length > 0)
+const unreadCount = computed(() => {
+  console.log('📢 Unread count:', events.value.length)
+  return events.value.length
+})
+const hasNotifications = computed(() => {
+  console.log('📢 Has notifications:', events.value.length > 0, 'count:', events.value.length)
+  return events.value.length > 0
+})
 
 const getNotificationIcon = (type: string) => {
   switch (type) {
@@ -118,12 +136,15 @@ const clearEvents = () => {
 }
 
 const togglePanel = () => {
+  console.log('🔔 togglePanel called, showPanel was:', showPanel.value)
   showPanel.value = !showPanel.value
+  console.log('  showPanel now:', showPanel.value)
 }
 
 // Listen for global event to open panel
 if (typeof window !== 'undefined') {
   window.addEventListener('open-notifications', () => {
+    console.log('🔔 Received open-notifications event')
     showPanel.value = true
   })
 }

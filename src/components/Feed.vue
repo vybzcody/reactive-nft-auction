@@ -22,8 +22,17 @@ const emit = defineEmits<{
 const fetchAuctions = async () => {
   try {
     loading.value = true
+    console.log('📡 Fetching auctions...')
     const activeIds = await getActiveAuctions()
+    console.log('📦 Active auction IDs:', activeIds)
+    
+    if (activeIds.length === 0) {
+      nfts.value = []
+      return
+    }
+    
     const auctionData = await Promise.all(activeIds.map(id => getAuction(id)))
+    console.log('✅ Loaded', auctionData.length, 'auctions')
 
     nfts.value = auctionData.map((auction) => ({
       ...auction,

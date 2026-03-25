@@ -20,15 +20,16 @@ const formatEther = (wei: bigint) => (Number(wei) / 1e18).toFixed(4)
 
 onMounted(async () => {
   loading.value = true
+  console.log('📊 Loading price discovery...')
 
   try {
-    // Get total supply from NFT contract
     const supply = await publicClient.readContract({
       address: NFT_CONTRACT_ADDRESS,
       abi: NFT_ABI,
       functionName: 'totalSupply',
     })
     totalSupply.value = supply
+    console.log('✅ Total supply:', supply.toString())
   } catch (error) {
     console.error('Failed to load collection data:', error)
   } finally {

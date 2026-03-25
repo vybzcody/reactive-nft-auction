@@ -59,11 +59,14 @@ const loadingBids = ref(false)
 
 // Fetch real bid history from contract events
 const fetchBidHistory = async (auctionId: number) => {
-  if (!auctionId) return
-  
+  if (!auctionId || bidHistoryData.value.length > 0) return // Cache: don't refetch if we have data
+
   loadingBids.value = true
+  console.log('📜 Fetching bid history for auction', auctionId)
   try {
-    // Get all BidPlaced events for this auction
+    const latestBlock = await publicClient.getBlockNumber()
+    const fromBlock = latestBlock - BigInt(1000) < 0n ? 0n : latestBlock - BigInt(1000)
+
     const events = await publicClient.getContractEvents({
       address: AUCTION_CONTRACT_ADDRESS,
       abi: AUCTION_ABI,
@@ -71,17 +74,18 @@ const fetchBidHistory = async (auctionId: number) => {
       args: {
         auctionId: BigInt(auctionId),
       },
-      fromBlock: 0n,
+      fromBlock,
+      toBlock: latestBlock,
     })
 
-    // Convert events to BidRecord format
     bidHistoryData.value = events.map((event, index) => ({
       id: index + 1,
       bidder: event.args.bidder || '0x0000000000000000000000000000000000000000',
       amount: event.args.amount || 0n,
-      timestamp: Date.now(), // Block timestamp would be better but requires extra lookup
+      timestamp: Date.now(),
       isProxy: false,
     }))
+    console.log('✅ Loaded', bidHistoryData.value.length, 'bids')
   } catch (err) {
     console.error('Failed to fetch bid history:', err)
     bidHistoryData.value = []
@@ -161,18 +165,16 @@ const handlePlaceBid = async () => {
   try {
     submitting.value = true
     error.value = ''
-    
-    // Record bid in history
-    bidHistory.addBid(props.nft.id!, {
-      bidder: props.nft.highestBidder || '0x0000000000000000000000000000000000000000',
-      amount: bidValue,
-      timestamp: Date.now(),
-      isProxy: false,
-    })
-    
+
     await placeBid(props.nft.id!, String(bidAmount.value))
     success.value = 'Bid placed successfully!'
     bidAmount.value = ''
+    
+    // Refresh bid history
+    if (props.nft.id) {
+      await fetchBidHistory(props.nft.id)
+    }
+    
     setTimeout(() => emit('back'), 2000)
   } catch (err: any) {
     console.error('Place bid error:', err)

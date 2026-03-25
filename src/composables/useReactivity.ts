@@ -1,15 +1,13 @@
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { publicClient } from '../config/clients'
 import { AUCTION_CONTRACT_ADDRESS, AUCTION_ABI } from '../config/contract'
-import type { Unsubscribe } from 'viem'
 
 interface AuctionEvent {
-  type: 'BidPlaced' | 'AuctionExtended' | 'AuctionFinalized' | 'AuctionCreated' | 'ReserveMet' | 'SniperDetected' | 'AuctionAutoFinalized'
+  type: 'BidPlaced' | 'AuctionCreated' | 'AuctionFinalized'
   auctionId?: string
   timestamp: number
   txHash?: string
   blockNumber?: string
-  // Event-specific data
   bidder?: string
   amount?: string
   endTime?: string
@@ -18,10 +16,6 @@ interface AuctionEvent {
   reserveMet?: boolean
   seller?: string
   tokenId?: string
-  message?: string
-  oldEndTime?: string
-  newEndTime?: string
-  bidAmount?: string
 }
 
 export function useReactivity() {
@@ -30,74 +24,87 @@ export function useReactivity() {
   let unsubscribeFns: (() => void)[] = []
 
   const addEvent = (event: AuctionEvent) => {
-    events.value.unshift(event)
-    // Keep only last 100 events
-    if (events.value.length > 100) {
-      events.value = events.value.slice(0, 100)
+    console.log('📬 Event received:', event.type, 'auctionId:', event.auctionId)
+    // Avoid duplicates
+    const isDuplicate = events.value.some(e => 
+      e.type === event.type && 
+      e.auctionId === event.auctionId && 
+      e.txHash === event.txHash
+    )
+    if (!isDuplicate) {
+      events.value.unshift(event)
+      if (events.value.length > 100) {
+        events.value = events.value.slice(0, 100)
+      }
     }
   }
 
-  const setupEventListeners = () => {
+  const setupEventListeners = async () => {
     if (!publicClient) {
-      console.error('Public client not available')
+      console.error('❌ Public client not available')
+      connected.value = false
       return
     }
 
-    connected.value = true
-    console.log('🔗 Connected to on-chain reactivity')
+    try {
+      const blockNum = await publicClient.getBlockNumber()
+      console.log('🔗 Connected to Somnia testnet, block:', blockNum.toString())
+      console.log('📡 Watching contract:', AUCTION_CONTRACT_ADDRESS)
+      connected.value = true
 
-    // Listen to BidPlaced events
-    const unsubscribeBidPlaced = publicClient.watchContractEvent({
-      address: AUCTION_CONTRACT_ADDRESS,
-      abi: AUCTION_ABI,
-      eventName: 'BidPlaced',
-      onLogs: (logs) => {
-        logs.forEach((log) => {
-          addEvent({
-            type: 'BidPlaced',
+      // BidPlaced - no specific filter to catch all bids
+      const unsub1 = publicClient.watchContractEvent({
+        address: AUCTION_CONTRACT_ADDRESS,
+        abi: AUCTION_ABI,
+        eventName: 'BidPlaced',
+        onLogs: (logs) => {
+          console.log('📍 BidPlaced event:', logs.length, 'logs')
+          logs.forEach(log => {
+            console.log('  - auctionId:', log.args.auctionId?.toString(), 'bidder:', log.args.bidder, 'amount:', log.args.amount?.toString())
+            addEvent({
+              type: 'BidPlaced',
+              auctionId: log.args.auctionId?.toString(),
+              bidder: log.args.bidder,
+              amount: log.args.amount?.toString(),
+              endTime: log.args.endTime?.toString(),
+              extended: log.args.extended,
+              timestamp: Date.now(),
+              txHash: log.transactionHash,
+              blockNumber: log.blockNumber?.toString(),
+            })
+          })
+        },
+      })
+      unsubscribeFns.push(unsub1)
+
+      // AuctionCreated
+      const unsub2 = publicClient.watchContractEvent({
+        address: AUCTION_CONTRACT_ADDRESS,
+        abi: AUCTION_ABI,
+        eventName: 'AuctionCreated',
+        onLogs: (logs) => {
+          console.log('📍 AuctionCreated event:', logs.length, 'logs')
+          logs.forEach(log => addEvent({
+            type: 'AuctionCreated',
             auctionId: log.args.auctionId?.toString(),
-            bidder: log.args.bidder,
-            amount: log.args.amount?.toString(),
-            endTime: log.args.endTime?.toString(),
-            extended: log.args.extended,
+            tokenId: log.args.tokenId?.toString(),
+            seller: log.args.seller,
             timestamp: Date.now(),
             txHash: log.transactionHash,
             blockNumber: log.blockNumber?.toString(),
-          })
-        })
-      },
-    })
-    unsubscribeFns.push(unsubscribeBidPlaced)
+          }))
+        },
+      })
+      unsubscribeFns.push(unsub2)
 
-    // Listen to AuctionExtended events
-    const unsubscribeAuctionExtended = publicClient.watchContractEvent({
-      address: AUCTION_CONTRACT_ADDRESS,
-      abi: AUCTION_ABI,
-      eventName: 'AuctionExtended',
-      onLogs: (logs) => {
-        logs.forEach((log) => {
-          addEvent({
-            type: 'AuctionExtended',
-            auctionId: log.args.auctionId?.toString(),
-            oldEndTime: log.args.oldEndTime?.toString(),
-            newEndTime: log.args.newEndTime?.toString(),
-            timestamp: Date.now(),
-            txHash: log.transactionHash,
-            blockNumber: log.blockNumber?.toString(),
-          })
-        })
-      },
-    })
-    unsubscribeFns.push(unsubscribeAuctionExtended)
-
-    // Listen to AuctionFinalized events
-    const unsubscribeAuctionFinalized = publicClient.watchContractEvent({
-      address: AUCTION_CONTRACT_ADDRESS,
-      abi: AUCTION_ABI,
-      eventName: 'AuctionFinalized',
-      onLogs: (logs) => {
-        logs.forEach((log) => {
-          addEvent({
+      // AuctionFinalized
+      const unsub3 = publicClient.watchContractEvent({
+        address: AUCTION_CONTRACT_ADDRESS,
+        abi: AUCTION_ABI,
+        eventName: 'AuctionFinalized',
+        onLogs: (logs) => {
+          console.log('📍 AuctionFinalized event:', logs.length, 'logs')
+          logs.forEach(log => addEvent({
             type: 'AuctionFinalized',
             auctionId: log.args.auctionId?.toString(),
             winner: log.args.winner,
@@ -106,112 +113,29 @@ export function useReactivity() {
             timestamp: Date.now(),
             txHash: log.transactionHash,
             blockNumber: log.blockNumber?.toString(),
-          })
-        })
-      },
-    })
-    unsubscribeFns.push(unsubscribeAuctionFinalized)
+          }))
+        },
+      })
+      unsubscribeFns.push(unsub3)
 
-    // Listen to AuctionCreated events
-    const unsubscribeAuctionCreated = publicClient.watchContractEvent({
-      address: AUCTION_CONTRACT_ADDRESS,
-      abi: AUCTION_ABI,
-      eventName: 'AuctionCreated',
-      onLogs: (logs) => {
-        logs.forEach((log) => {
-          addEvent({
-            type: 'AuctionCreated',
-            auctionId: log.args.auctionId?.toString(),
-            tokenId: log.args.tokenId?.toString(),
-            seller: log.args.seller,
-            endTime: log.args.endTime?.toString(),
-            timestamp: Date.now(),
-            txHash: log.transactionHash,
-            blockNumber: log.blockNumber?.toString(),
-          })
-        })
-      },
-    })
-    unsubscribeFns.push(unsubscribeAuctionCreated)
-
-    // Listen to ReserveMet events
-    const unsubscribeReserveMet = publicClient.watchContractEvent({
-      address: AUCTION_CONTRACT_ADDRESS,
-      abi: AUCTION_ABI,
-      eventName: 'ReserveMet',
-      onLogs: (logs) => {
-        logs.forEach((log) => {
-          addEvent({
-            type: 'ReserveMet',
-            auctionId: log.args.auctionId?.toString(),
-            bidAmount: log.args.bidAmount?.toString(),
-            timestamp: Date.now(),
-            txHash: log.transactionHash,
-            blockNumber: log.blockNumber?.toString(),
-          })
-        })
-      },
-    })
-    unsubscribeFns.push(unsubscribeReserveMet)
-
-    // Listen to SniperDetected events (new on-chain reactivity event)
-    const unsubscribeSniperDetected = publicClient.watchContractEvent({
-      address: AUCTION_CONTRACT_ADDRESS,
-      abi: AUCTION_ABI,
-      eventName: 'SniperDetected',
-      onLogs: (logs) => {
-        logs.forEach((log) => {
-          addEvent({
-            type: 'SniperDetected',
-            auctionId: log.args.auctionId?.toString(),
-            bidder: log.args.bidder,
-            timestamp: Date.now(),
-            txHash: log.transactionHash,
-            blockNumber: log.blockNumber?.toString(),
-          })
-        })
-      },
-    })
-    unsubscribeFns.push(unsubscribeSniperDetected)
-
-    // Listen to AuctionAutoFinalized events (new on-chain reactivity event)
-    const unsubscribeAuctionAutoFinalized = publicClient.watchContractEvent({
-      address: AUCTION_CONTRACT_ADDRESS,
-      abi: AUCTION_ABI,
-      eventName: 'AuctionAutoFinalized',
-      onLogs: (logs) => {
-        logs.forEach((log) => {
-          addEvent({
-            type: 'AuctionAutoFinalized',
-            auctionId: log.args.auctionId?.toString(),
-            timestamp: Date.now(),
-            txHash: log.transactionHash,
-            blockNumber: log.blockNumber?.toString(),
-          })
-        })
-      },
-    })
-    unsubscribeFns.push(unsubscribeAuctionAutoFinalized)
+      console.log('✅ Event listeners active - watching for BidPlaced, AuctionCreated, AuctionFinalized')
+    } catch (err) {
+      console.error('❌ Setup failed:', err)
+      connected.value = false
+    }
   }
 
-  const cleanupEventListeners = () => {
-    unsubscribeFns.forEach((unsubscribe) => {
-      try {
-        unsubscribe()
-      } catch (error) {
-        console.error('Error unsubscribing from event:', error)
-      }
+  const cleanup = () => {
+    unsubscribeFns.forEach(fn => {
+      try { fn() } catch (e) { console.error('Unsub error:', e) }
     })
     unsubscribeFns = []
     connected.value = false
-    console.log('❌ Disconnected from on-chain reactivity')
+    console.log('❌ Disconnected')
   }
 
   onMounted(setupEventListeners)
-  onUnmounted(cleanupEventListeners)
+  onUnmounted(cleanup)
 
-  return {
-    events,
-    connected
-  }
+  return { events, connected }
 }

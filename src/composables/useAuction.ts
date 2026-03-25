@@ -144,25 +144,42 @@ export function useAuction() {
     } catch (error: any) {
       console.error('[useAuction] Create auction failed:', error)
 
-      // Check for specific error messages from contract
+      // User rejected transaction
+      if (error.code === 4001 || error.message?.includes('User rejected') || error.message?.includes('denied request signature')) {
+        throw new Error('Transaction cancelled. Please confirm the transaction in your wallet to create the auction.')
+      }
+      // Duration errors
       if (error.message?.includes('Duration too short')) {
         throw new Error('Duration must be at least 60 seconds (1 minute)')
-      } else if (error.message?.includes('Duration too long')) {
+      }
+      if (error.message?.includes('Duration too long')) {
         throw new Error('Duration must be at most 86400 seconds (24 hours)')
-      } else if (error.message?.includes('Not NFT owner')) {
+      }
+      // Ownership errors
+      if (error.message?.includes('Not NFT owner')) {
         throw new Error('You do not own this NFT')
-      } else if (error.message?.includes('Contract not approved')) {
+      }
+      // Approval errors
+      if (error.message?.includes('Contract not approved')) {
         throw new Error('Auction contract is not approved to transfer your NFT. Please approve first.')
-      } else if (error.message?.includes('nonce')) {
+      }
+      // Nonce issues
+      if (error.message?.includes('nonce')) {
         throw new Error('Transaction nonce conflict. Please try again.')
-      } else if (error.message?.includes('underpriced')) {
+      }
+      // Gas price issues
+      if (error.message?.includes('underpriced')) {
         throw new Error('Transaction was underpriced. Please try again.')
-      } else if (error.message?.includes('replacement')) {
+      }
+      if (error.message?.includes('replacement')) {
         throw new Error('Transaction was replaced. Please try again.')
-      } else if (error.message?.includes('execution reverted')) {
+      }
+      // Contract reverts
+      if (error.message?.includes('execution reverted')) {
         throw new Error('Transaction failed. Possible reasons:\n1. Auction contract needs 32 SOMI balance for subscriptions\n2. NFT approval issue\n3. Invalid duration (must be 60s - 24hrs)')
       }
-      throw error
+      // Default error
+      throw new Error('Failed to create auction: ' + (error.message || 'Unknown error. Please try again.'))
     }
   }
 
@@ -217,41 +234,51 @@ export function useAuction() {
       })
       
       console.log('[useAuction] Bid transaction hash:', hash)
-      
+
       // Wait for confirmation
       const receipt = await publicClient.waitForTransactionReceipt({
         hash,
         timeout: 120_000,
       })
-      
+
       console.log('[useAuction] Bid confirmed:', receipt.transactionHash)
       return { hash, receipt }
     } catch (error: any) {
       console.error('[useAuction] Place bid failed:', error)
 
-      // Check for common errors and throw user-friendly messages
+      // User rejected transaction
+      if (error.code === 4001 || error.message?.includes('User rejected') || error.message?.includes('denied request signature')) {
+        throw new Error('Transaction cancelled. Please confirm the transaction in your wallet to place a bid.')
+      }
+      // Bid too low
       if (error.message?.includes('Bid must be higher')) {
         throw new Error('Bid must be higher than current highest bid (at least 10% more)')
       }
+      // Auction ended
       if (error.message?.includes('Auction already ended')) {
         throw new Error('This auction has already ended')
       }
-      if (error.message?.includes('reverted') || error.message?.includes('Internal')) {
-        throw new Error('Bid failed. Make sure you have enough STT balance and the auction is still active.')
-      }
+      // Insufficient balance
       if (error.message?.includes('insufficient funds')) {
         throw new Error('Insufficient STT balance for this bid')
       }
+      // Nonce issues
       if (error.message?.includes('nonce')) {
         throw new Error('Transaction nonce conflict. Please try again.')
       }
+      // Gas price issues
       if (error.message?.includes('underpriced')) {
         throw new Error('Transaction was underpriced. Please try again.')
       }
       if (error.message?.includes('replacement')) {
         throw new Error('Transaction was replaced. Please try again.')
       }
-      throw error
+      // Contract reverts
+      if (error.message?.includes('reverted') || error.message?.includes('Internal')) {
+        throw new Error('Bid failed. Make sure you have enough STT balance and the auction is still active.')
+      }
+      // Default error
+      throw new Error('Failed to place bid: ' + (error.message || 'Unknown error. Please try again.'))
     }
   }
 
